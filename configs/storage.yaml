@@ -1,0 +1,12 @@
+storage:
+  data_dir: data
+  raw_dir: raw
+  canonical_dir: canonical
+  panel_dir: panel
+  dataset_dir: dataset
+  factors_dir: factors
+  cache_dir: cache
+  result_dir: result
+  metadata_dir: metadata
+  duckdb_name: research.duckdb
+  sqlite_name: metadata.sqlite

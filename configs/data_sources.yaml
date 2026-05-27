@@ -1,0 +1,19 @@
+tushare:
+  pause_seconds: 0.2
+  max_retries: 3
+  endpoints:
+    - daily
+    - adj_factor
+    - daily_basic
+    - stock_basic
+    - trade_cal
+    - suspend_d
+    - stk_limit
+    - stock_st
+    - index_classify
+    - index_member
+    - index_daily
+    - fina_indicator
+    - income
+    - balancesheet
+    - cashflow

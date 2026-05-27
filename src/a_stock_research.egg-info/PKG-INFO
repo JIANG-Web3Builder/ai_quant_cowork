@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: a-stock-research
+Version: 0.1.0
+Summary: A-share local data foundation for factor research, backtesting, and ML
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: duckdb>=1.1.0
+Requires-Dist: pandas>=2.2.0
+Requires-Dist: polars>=1.8.0
+Requires-Dist: pyarrow>=17.0.0
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: PyYAML>=6.0.2
+Requires-Dist: tushare>=1.4.18
+
+# A 股研究数据底层框架
+
+本项目用于构建本地 A 股数据底层框架，并将 Tushare 数据落盘到 Parquet 与 DuckDB/SQLite 元数据层，服务后续因子研究、回测与机器学习。

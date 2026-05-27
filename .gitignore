@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+*.duckdb
+*.sqlite
+.pytest_cache/
+
+60m/
+deliverables/ai_report_task1/outputs_enhanced/
+deliverables/ai_report_task1/__pycache__/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
