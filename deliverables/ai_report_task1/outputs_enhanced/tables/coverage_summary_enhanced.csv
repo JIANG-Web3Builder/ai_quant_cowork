@@ -1,0 +1,8 @@
+﻿dataset,row_count,note
+daily_base,5538632,DuckDB研究底座
+tradable_daily_base,5538632,DuckDB研究底座
+daily_fundamental_base,5538632,DuckDB研究底座
+index_daily,6354,DuckDB研究底座
+stock_basic,5522,DuckDB研究底座
+60m_stock_data_parquet,5490,同花顺60分钟价量数据文件数
+analysis_universe_days,4058650,20230101以来可交易股票-日期样本

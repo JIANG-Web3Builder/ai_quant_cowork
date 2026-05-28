@@ -1,0 +1,8 @@
+﻿target,factor,factor_name,weight
+next_5d_return,neg_atr_14_pct,低ATR波动,0.26224697166663186
+next_5d_return,neg_volatility_20,20日低波动,0.19159413790680196
+next_5d_return,reversal_20,20日反转,0.1878119611137845
+next_5d_return,neg_volatility_60,60日低波动,0.15981606990085825
+next_5d_return,neg_turnover_20d_avg,20日低换手,0.11387868331609795
+next_5d_return,reversal_5,5日反转,0.07713674279095735
+next_5d_return,reversal_1,1日反转,0.0075154333048681795
