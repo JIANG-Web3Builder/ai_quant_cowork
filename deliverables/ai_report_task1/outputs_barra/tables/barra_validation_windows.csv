@@ -1,0 +1,4 @@
+﻿window_id,train_end,validation_start,validation_end
+window_1,20240305,20240306,20240604
+window_2,20240604,20240605,20240828
+window_3,20240828,20240829,20241129

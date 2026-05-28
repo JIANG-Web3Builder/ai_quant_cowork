@@ -1,0 +1,11 @@
+﻿metric,value,display_name,snapshot_group
+annualized_return,0.171873456126852,年化收益,train
+benchmark_annualized_return,0.00835119381247118,基准年化收益,train
+excess_annualized_return,0.16819173121035824,年化超额,train
+annualized_volatility,0.29412975512019324,年化波动,train
+sharpe,0.5843456948332807,Sharpe,train
+max_drawdown,-0.2748704974619297,最大回撤,train
+excess_max_drawdown,-0.27116786911774204,超额最大回撤,train
+win_rate,0.5216450216450217,胜率,train
+avg_turnover,0.277965367965368,平均换手,train
+trading_days,462.0,交易日数,train

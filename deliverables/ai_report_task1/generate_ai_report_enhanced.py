@@ -26,6 +26,8 @@ OUTPUT_DIR = WORK_DIR / "outputs_enhanced"
 TABLE_DIR = OUTPUT_DIR / "tables"
 FIGURE_DIR = OUTPUT_DIR / "figures"
 REPORT_DIR = OUTPUT_DIR / "report"
+BARRA_OUTPUT_DIR = WORK_DIR / "outputs_barra"
+BARRA_TABLE_DIR = BARRA_OUTPUT_DIR / "tables"
 DOC_SOURCE = ROOT_DIR / "选股与择时中AI可应用部分因子总结方案-提交版.docx"
 DOC_TARGET = REPORT_DIR / "选股与择时中AI可应用部分因子总结方案-增强数据支撑版.docx"
 
@@ -502,17 +504,23 @@ def build_factor_frame(frame: pd.DataFrame, benchmark: pd.DataFrame) -> pd.DataF
         f"z_{factor}": data.groupby("trade_date")[factor].transform(winsorized_zscore)
         for factor in DAILY_FACTOR_COLUMNS
     }
-    result = pd.concat([data, pd.DataFrame(z_columns, index=data.index)], axis=1)
-    keep_columns = [
-        "ts_code",
-        "trade_date",
-        "amount",
-        "research_universe",
-        "next_return",
-        "next_5d_return",
-        "next_20d_return",
-    ] + DAILY_FACTOR_COLUMNS + list(z_columns.keys())
-    return result[keep_columns].copy()
+    z_frame = pd.DataFrame(z_columns, index=data.index).astype(np.float32)
+    base_frame = data[
+        [
+            "ts_code",
+            "trade_date",
+            "amount",
+            "research_universe",
+            "next_return",
+            "next_5d_return",
+            "next_20d_return",
+        ]
+    ].copy()
+    numeric_base_columns = ["amount", "next_return", "next_5d_return", "next_20d_return"]
+    for column in numeric_base_columns:
+        base_frame[column] = pd.to_numeric(base_frame[column], errors="coerce").astype(np.float32)
+    result = pd.concat([base_frame, z_frame], axis=1)
+    return result
 
 
 def build_coverage_summary(con: duckdb.DuckDBPyConnection, factor_frame: pd.DataFrame) -> pd.DataFrame:
@@ -1427,6 +1435,38 @@ def add_picture_if_exists(document: Document, path: Path, width: float = 6.2) ->
         document.add_picture(str(path), width=Inches(width))
 
 
+def read_optional_csv(path: Path) -> pd.DataFrame:
+    if path.exists() and path.stat().st_size > 0:
+        return pd.read_csv(path)
+    return pd.DataFrame()
+
+
+def load_barra_report_tables() -> dict[str, pd.DataFrame]:
+    return {
+        "selected_model": read_optional_csv(BARRA_TABLE_DIR / "barra_selected_model.csv"),
+        "model_selection": read_optional_csv(BARRA_TABLE_DIR / "barra_model_selection.csv"),
+        "weights": read_optional_csv(BARRA_TABLE_DIR / "barra_selected_factor_weights.csv"),
+        "coefficients": read_optional_csv(BARRA_TABLE_DIR / "barra_ridge_coefficients.csv"),
+        "train_summary": read_optional_csv(BARRA_TABLE_DIR / "barra_selected_train_backtest_summary.csv"),
+        "oos_summary": read_optional_csv(BARRA_TABLE_DIR / "barra_selected_oos_backtest_summary.csv"),
+        "style_exposure": read_optional_csv(BARRA_TABLE_DIR / "barra_style_active_exposure_oos.csv"),
+        "industry_exposure": read_optional_csv(BARRA_TABLE_DIR / "barra_industry_active_weight_oos.csv"),
+        "exposure_comparison": read_optional_csv(BARRA_TABLE_DIR / "barra_exposure_comparison.csv"),
+        "validation_windows": read_optional_csv(BARRA_TABLE_DIR / "barra_validation_windows.csv"),
+    }
+
+
+def attach_industry_to_factor_frame(factor_frame: pd.DataFrame, raw_daily: pd.DataFrame) -> pd.DataFrame:
+    industry_frame = raw_daily[["ts_code", "trade_date", "industry"]].copy()
+    industry_frame["ts_code"] = industry_frame["ts_code"].astype(str)
+    industry_frame["trade_date"] = industry_frame["trade_date"].astype(str)
+    industry_frame["industry"] = industry_frame["industry"].fillna("未知行业").astype(str)
+    industry_frame = industry_frame.drop_duplicates(["ts_code", "trade_date"])
+    merged = factor_frame.merge(industry_frame, on=["ts_code", "trade_date"], how="left")
+    merged["industry"] = merged["industry"].fillna("未知行业").replace("", "未知行业")
+    return merged
+
+
 def localized_ic_table(frame: pd.DataFrame) -> pd.DataFrame:
     columns = ["factor_name", "mean_ic", "ic_ir", "positive_ratio", "observations"]
     result = frame[columns].copy()
@@ -1549,6 +1589,52 @@ def localized_commonality_table(frame: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def localized_backtest_comparison_table(train_frame: pd.DataFrame, oos_frame: pd.DataFrame) -> pd.DataFrame:
+    if train_frame.empty or oos_frame.empty:
+        return pd.DataFrame()
+    train_row = train_frame.iloc[0]
+    oos_row = oos_frame.iloc[0]
+    return pd.DataFrame(
+        [
+            ["组合年化收益", train_row.get("annualized_return"), oos_row.get("annualized_return")],
+            ["基准年化收益", train_row.get("benchmark_annualized_return"), oos_row.get("benchmark_annualized_return")],
+            ["年化超额", train_row.get("excess_annualized_return"), oos_row.get("excess_annualized_return")],
+            ["年化波动", train_row.get("annualized_volatility"), oos_row.get("annualized_volatility")],
+            ["Sharpe", train_row.get("sharpe"), oos_row.get("sharpe")],
+            ["最大回撤", train_row.get("max_drawdown"), oos_row.get("max_drawdown")],
+            ["超额最大回撤", train_row.get("excess_max_drawdown"), oos_row.get("excess_max_drawdown")],
+            ["胜率", train_row.get("win_rate"), oos_row.get("win_rate")],
+            ["平均换手", train_row.get("avg_turnover"), oos_row.get("avg_turnover")],
+            ["交易日数", train_row.get("trading_days"), oos_row.get("trading_days")],
+        ],
+        columns=["指标", "全训练期", "样本外"],
+    )
+
+
+def localized_style_exposure_table(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    return frame.rename(
+        columns={
+            "style_name": "风格因子",
+            "active_exposure_mean": "平均主动暴露",
+            "active_exposure_abs_mean": "绝对主动暴露均值",
+        }
+    )[["风格因子", "平均主动暴露", "绝对主动暴露均值"]]
+
+
+def localized_industry_exposure_table(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    return frame.rename(
+        columns={
+            "industry": "行业",
+            "active_weight_mean": "平均主动权重",
+            "active_weight_abs_mean": "绝对主动权重均值",
+        }
+    )[["行业", "平均主动权重", "绝对主动权重均值"]]
+
+
 def build_no_leakage_check_table() -> pd.DataFrame:
     checks = pd.DataFrame(
         [
@@ -1602,6 +1688,7 @@ def write_report_docx(
 ) -> None:
     document = Document()
     apply_report_styles(document)
+    barra_tables = load_barra_report_tables()
 
     title = document.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1745,6 +1832,30 @@ def write_report_docx(
         )
     add_picture_if_exists(document, FIGURE_DIR / SELECTED_NAV_FIGURE)
 
+    barra_selected = barra_tables["selected_model"]
+    barra_train_summary = barra_tables["train_summary"]
+    barra_oos_summary = barra_tables["oos_summary"]
+    barra_style_exposure = barra_tables["style_exposure"]
+    barra_industry_exposure = barra_tables["industry_exposure"]
+    barra_model_selection = barra_tables["model_selection"]
+    if not barra_selected.empty:
+        selected_barra = barra_selected.iloc[0]
+        barra_target_text = selected_barra.get("target_label", TARGET_LABELS.get(str(selected_barra.get("target", "")), str(selected_barra.get("target", ""))))
+        document.add_paragraph(
+            f"作为风险控制增强版补充，本轮进一步构建了Barra风格/行业中性框架：先形成原始多因子或Ridge打分，再在每日横截面上对规模、估值、动量、低波、流动性、质量以及行业哑变量做残差化处理。"
+            f"在同样的滚动验证口径下，Barra增强版当前选定模型为{selected_barra['model_type']} / {barra_target_text} / Top{int(selected_barra['top_n'])}。"
+            "这一步的作用不是追求更高的名义收益，而是验证收益是否能在更低的行业偏离和风格暴露下保持稳定。"
+        )
+        if not barra_model_selection.empty:
+            add_table(document, "表11-1：Barra风格行业中性模型选择结果", localized_model_selection_table(barra_model_selection), 8)
+        barra_backtest_compare = localized_backtest_comparison_table(barra_train_summary, barra_oos_summary)
+        if not barra_backtest_compare.empty:
+            add_table(document, "表11-2：Barra风格行业中性模型训练/样本外回测对比", barra_backtest_compare, 10)
+        if not barra_style_exposure.empty:
+            add_table(document, "表11-3：Barra风格主动暴露摘要", localized_style_exposure_table(barra_style_exposure), 8)
+        if not barra_industry_exposure.empty:
+            add_table(document, "表11-4：Barra行业主动权重摘要", localized_industry_exposure_table(barra_industry_exposure), 10)
+
     add_heading(document, "（六）样本共性分析：把强势样本转化为候选因子假设", 2)
     document.add_paragraph(
         "对样本外未来20个交易日收益进入当日横截面前10%的股票进行共性对比，可以看到强势样本在哪些标准化因子上相对全市场更突出。"
@@ -1846,6 +1957,7 @@ def write_markdown_summary(
         f"- 训练期：{START_DATE} 至 {MODEL_TRAIN_END_DATE}",
         f"- 样本外观察期：{TEST_START_DATE} 之后",
     ]
+    barra_tables = load_barra_report_tables()
     if not train_ic.empty:
         lines.append(f"- 训练期平均IC最高因子：{train_ic.iloc[0]['factor_name']} ({train_ic.iloc[0]['mean_ic']:.4f})")
     if not oos_ic.empty:
@@ -1866,6 +1978,14 @@ def write_markdown_summary(
     if not intraday_ic.empty:
         best_intraday = intraday_ic.iloc[0]
         lines.append(f"- 60分钟样本中IC最高特征：{best_intraday['factor_name']} ({best_intraday['mean_ic']:.4f})")
+    if not barra_tables["selected_model"].empty:
+        barra_selected = barra_tables["selected_model"].iloc[0]
+        lines.append(f"- Barra增强版选定模型：{barra_selected['model_type']} / Top{int(barra_selected['top_n'])}")
+    if not barra_tables["oos_summary"].empty:
+        barra_oos = barra_tables["oos_summary"].iloc[0]
+        lines.append(f"- Barra增强版样本外年化收益：{barra_oos['annualized_return']:.2%}")
+        lines.append(f"- Barra增强版样本外年化超额：{barra_oos['excess_annualized_return']:.2%}")
+        lines.append(f"- Barra增强版样本外最大回撤：{barra_oos['max_drawdown']:.2%}")
     (OUTPUT_DIR / "summary_enhanced.md").write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -1891,6 +2011,12 @@ def main() -> None:
         factor_corr = build_factor_correlation(factor_frame)
         commonality = build_sample_commonality(factor_frame)
         quantile = build_quantile_returns(factor_frame)
+        from generate_ai_report_barra_model import build_barra_scores_and_select, ensure_directories as ensure_barra_directories, write_summary as write_barra_summary
+
+        ensure_barra_directories()
+        barra_factor_frame = attach_industry_to_factor_frame(factor_frame, daily)
+        _, barra_selected, _, _, barra_style_exposure, barra_industry_exposure, _, barra_oos_result = build_barra_scores_and_select(barra_factor_frame, benchmark)
+        write_barra_summary(barra_selected, barra_oos_result, barra_style_exposure, barra_industry_exposure)
         _, timing_summary = build_timing_regime(con)
         _, intraday_ic = load_intraday_features(factor_frame)
     finally:
